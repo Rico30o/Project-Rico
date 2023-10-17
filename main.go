@@ -1,60 +1,40 @@
 package main
 
 import (
-	"fmt"
-	"net"
-	"sync"
-	"time"
+	"io/ioutil"
+
+	"github.com/gofiber/fiber/v2"
 )
 
-// checkOnline checks if a server is online by attempting to establish a TCP connection.
-func checkOnline(server string, wg *sync.WaitGroup) bool {
-	defer wg.Done()
-
-	conn, err := net.DialTimeout("tcp", server, 2*time.Second)
-	if err != nil {
-		fmt.Printf("%s is offline\n", server)
-		return false
-	}
-	defer conn.Close()
-
-	fmt.Printf("%s is online\n", server)
-	return true
-}
-
 func main() {
-	// List of servers to check
-	servers := []string{"example.com:80", "google.com:80", "nonexistent.com:80"}
+	app := fiber.New()
 
-	// WaitGroup to wait for all goroutines to finish
-	var wg sync.WaitGroup
+	app.Get("/generate-kill-script", func(c *fiber.Ctx) error {
+		script := `#!/bin/bash
+# Replace with your process name or PID
+process_name="your_process_name"
 
-	// Channel to receive results from goroutines
-	resultCh := make(chan bool)
+# Find the process ID
+pid=$(pgrep "$process_name")
 
-	for _, server := range servers {
-		// Increment the WaitGroup counter for each goroutine
-		wg.Add(1)
+if [ -z "$pid" ]; then
+ echo "Process not found: $process_name"
+else
+ # Kill the process
+ kill -9 $pid
+ echo "Killed process: $process_name (PID: $pid)"
+fi
+`
 
-		// Launch a goroutine to check the online status of each server
-		go func(server string) {
-			resultCh <- checkOnline(server, &wg)
-		}(server)
-	}
-
-	// Close the result channel when all goroutines are done
-	go func() {
-		wg.Wait()
-		close(resultCh)
-	}()
-
-	// Collect and process the results
-	for result := range resultCh {
-		// Process the result (true for online, false for offline)
-		if result {
-			// Do something when online
-		} else {
-			// Do something when offline
+		// Save the script to a file
+		err := ioutil.WriteFile("kill.sh", []byte(script), 0755)
+		if err != nil {
+			return err
 		}
-	}
+
+		// Send the script file as a response
+		return c.SendFile("kill.sh")
+	})
+
+	app.Listen(":3000")
 }
